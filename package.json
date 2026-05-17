@@ -1,8 +1,12 @@
 {
   "name": "@nubond/posthtml-value-interpolation",
-  "description": "nuBond PostHTML plugin for Parcel for value interpolation",
+  "description": "PostHTML plugin for Parcel that compiles mustache-style {{ expression }} templates into nuBond nb-value bindings at build time",
   "author": "Dmytro Tomayly",
-  "keywords": ["nuBond", "PostHTML", "Parcel", "value-interpolation"],
+  "keywords": [
+    "nubond", "posthtml", "posthtml-plugin", "parcel", "parcel-plugin",
+    "value-interpolation", "interpolation", "mustache", "template", "nb-value",
+    "html", "build-time", "transform"
+  ],
   "homepage": "https://github.com/nubond/posthtml-value-interpolation",
   "repository": {
     "type": "git",
