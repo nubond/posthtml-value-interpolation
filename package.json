@@ -13,7 +13,6 @@
     "url": "git+https://github.com/nubond/posthtml-value-interpolation.git"
   },
   "license": "MIT",
-  "version": "1.0.0",
   "type": "module",
   "main": "src/index.cjs",
   "module": "src/index.mjs",
