@@ -27,7 +27,7 @@ The plugin emits nuBond-native bindings:
 
 ## Installation
 
-> If you scaffolded your project from [`npm create nubond`](https://www.npmjs.com/package/create-nubond), this plugin is already wired up — no need to do anything.
+> If you scaffolded your project from [`npm create nubond`](https://github.com/nubond/create-nubond), this plugin is already wired up — no need to do anything.
 
 1. Install the package:
 
