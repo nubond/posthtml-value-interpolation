@@ -1,4 +1,4 @@
-<h1 align="center">A <a href="https://parceljs.org/">Parcel</a>\<a href="https://github.com/posthtml/posthtml/">PostHTML</a> interpolation plugin for <a href="https://github.com/nubond/nubond">nuBond</a></h1>
+<h1 align="center">A <a href="https://github.com/parcel-bundler/parcel">Parcel</a>\<a href="https://github.com/posthtml/posthtml/">PostHTML</a> interpolation plugin for <a href="https://github.com/nubond/nubond">nuBond</a></h1>
 
 <p align="center">
   <strong>Interpolates mustache-style templates {{ expression }} to &lt;span nb-value="expression"&gt;&lt;/span&gt; bindings at build time.</strong>
