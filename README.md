@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@nubond/posthtml-value-interpolation"><img alt="npm" src="https://img.shields.io/npm/v/@nubond/posthtml-value-interpolation.svg"></a>
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/npm/l/nubond.svg"></a>
-  <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen.svg">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-99%25-brightgreen.svg">
   <img alt="Made in Ukraine" src="https://img.shields.io/badge/Made_in-Ukraine-FFD800.svg?labelColor=0056B9">
 </p>
 
@@ -61,7 +61,7 @@ const { html } = await posthtml([valueInterpolation()])
 
 Anything between `{{ … }}` is passed verbatim into `nb-value`, so the full nuBond expression grammar works — member access, method calls, ternaries, template literals, repeat-scope vars, expression prefixes (`#`, `@`), etc.
 
-The plugin only transforms **text nodes** — HTML attributes (`<div class="{{ x }}">`), `<script>`/`<style>` blocks, and unmatched braces are left untouched.
+The plugin only transforms **text nodes** — HTML attributes (`<div class="{{ x }}">`) and unmatched braces are left untouched.
 
 
 ## License

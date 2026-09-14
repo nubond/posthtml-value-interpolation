@@ -34,7 +34,6 @@
     "build": "unbuild",
     "prepack": "unbuild",
     "lint": "biome lint ./lib ./test",
-    "pretest": "npm run lint",
     "test": "vitest run --coverage"
   },
   "devDependencies": {

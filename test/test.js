@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, vi } from 'vitest'
 import posthtml from 'posthtml'
 import plugin from '../lib/index.js'
 
@@ -358,18 +358,53 @@ describe('Special characters in expressions', () => {
 // ---------------------------------------------------------------------------
 // 13. getStartIndex edge cases — multiple {{ before }}
 // ---------------------------------------------------------------------------
-describe('getStartIndex — multiple opening braces before close', () => {
-  test('nested {{ picks the last opening before close', async () => {
-    const html = '<div>{{ {{ value }}</div>'
-    const result = await process(html)
-    expect(result).toContain('nb-value=')
+describe('getStartIndex — multiple opening closed braces before close error', () => {
+  test('two separate opening braces with white space before single close', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await process('<div>{{ {{ value }}</div>')
+      console.log(result);
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error.mock.calls[0][0]).toBe('[posthtml-value-interpolation] {{ {{ value }} contains invalid interpolation')
+    } finally {
+      error.mockRestore()
+    }
   })
 
-  test('two separate opening braces before single close', async () => {
-    const html = '<div>aa {{ bb {{ cc }}</div>'
-    const result = await process(html)
-    expect(result).toContain('nb-value=" cc "')
-    expect(result).toContain('aa {{ bb ')
+  test('two separate opening braces without white space before single close', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await process('<div>aa {{ bb {{ cc }}</div>')
+      console.log(result);
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error.mock.calls[0][0]).toBe('[posthtml-value-interpolation] aa {{ bb {{ cc }} contains invalid interpolation')
+    } finally {
+      error.mockRestore()
+    }
+  })
+
+  test('two separate closing braces with white space before single close', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await process('<div>{{ value }} }}</div>')
+      console.log(result);
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error.mock.calls[0][0]).toBe('[posthtml-value-interpolation] {{ value }} }} contains invalid interpolation')
+    } finally {
+      error.mockRestore()
+    }
+  })
+
+  test('two separate closing braces without white space before single close', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await process('<div>{{ aa }} bb }} cc</div>')
+      console.log(result);
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error.mock.calls[0][0]).toBe('[posthtml-value-interpolation] {{ aa }} bb }} cc contains invalid interpolation')
+    } finally {
+      error.mockRestore()
+    }
   })
 })
 
@@ -483,5 +518,94 @@ describe('Boundary conditions', () => {
     const html = `<div>{{ ${expr} }}</div>`
     const result = await process(html)
     expect(result).toContain(`nb-value=" ${expr} "`)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 18. Double-quote escaping in expressions
+// ---------------------------------------------------------------------------
+describe('Double-quote escaping', () => {
+  test('double-quoted string argument is escaped as &quot;', async () => {
+    const html = '<div>{{ this.getLabel("x") }}</div>'
+    const result = await process(html)
+    expect(result).toBe(`<div><span nb-value=" this.getLabel('x') "></span></div>`)
+  })
+
+  test('multiple double quotes are all escaped', async () => {
+    const html = '<div>{{ this.fn("a", "b") }}</div>'
+    const result = await process(html)
+    expect(result).toBe(`<div><span nb-value=" this.fn('a', 'b') "></span></div>`)
+  })
+
+  test('single quotes are left as-is', async () => {
+    const html = "<div>{{ this.fn('a') }}</div>"
+    const result = await process(html)
+    expect(result).toBe(`<div><span nb-value=" this.fn('a') "></span></div>`)
+  })
+
+  test('escaped attribute never terminates early', async () => {
+    const html = '<div>{{ this.getLabel("x") }}</div>'
+    const result = await process(html)
+    expect(result).toMatch(/<span nb-value="[^"]*"><\/span>/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 19. Script, style, and comment content is skipped
+// ---------------------------------------------------------------------------
+describe('Script, style, and comment content', () => {
+  test('nested block braces inside inline script are untouched', async () => {
+    const html = '<script>if(a){{b()}}</script>'
+    const result = await process(html)
+    expect(result).toBe('<script>if(a){{b()}}</script>')
+  })
+
+  test('interpolation-shaped token inside style is untouched', async () => {
+    const html = '<style>/* {{ not a binding }} */ .a{color:red}</style>'
+    const result = await process(html)
+    expect(result).toBe('<style>/* {{ not a binding }} */ .a{color:red}</style>')
+  })
+
+  test('interpolation inside an HTML comment is untouched', async () => {
+    const html = '<div><!-- {{ this.x }} --></div>'
+    const result = await process(html)
+    expect(result).toBe('<div><!-- {{ this.x }} --></div>')
+  })
+
+  test('text around a script is still transformed', async () => {
+    const html = '<div>{{ this.a }}<script>let o = {{}};</script>{{ this.b }}</div>'
+    const result = await process(html)
+    expect(result).toBe(
+      '<div><span nb-value=" this.a "></span><script>let o = {{}};</script><span nb-value=" this.b "></span></div>'
+    )
+  })
+
+  test('script nested deeper in the tree is still skipped', async () => {
+    const html = '<div><section><script>if(a){{b()}}</script></section>{{ this.x }}</div>'
+    const result = await process(html)
+    expect(result).toBe(
+      '<div><section><script>if(a){{b()}}</script></section><span nb-value=" this.x "></span></div>'
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 20. Unbalanced-brace
+// ---------------------------------------------------------------------------
+describe('Unbalanced-brace', () => {
+  test('single object', async () => {
+    const html = '<div>{{ {a: {b: 1}} }}</div>'
+    const result = await process(html)
+    expect(result).toBe(
+      '<div><span nb-value=" {a: {b: 1}} "></span></div>'
+    )
+  })
+
+  test('multiple objects', async () => {
+    const html = '<div>{{ this.a }} and {{ this.fn({k: 1}) }} and {{ {a: {b: 1}} }}</div>'
+    const result = await process(html)
+    expect(result).toBe(
+      '<div><span nb-value=" this.a "></span> and <span nb-value=" this.fn({k: 1}) "></span> and <span nb-value=" {a: {b: 1}} "></span></div>'
+    )
   })
 })
