@@ -64,6 +64,38 @@ Anything between `{{ … }}` is passed verbatim into `nb-value`, so the full nuB
 The plugin only transforms **text nodes** — HTML attributes (`<div class="{{ x }}">`) and unmatched braces are left untouched.
 
 
+## W3C-compliant mode
+
+If your app runs nuBond in W3C compliance mode (`complyWithW3C: true`), the bindings must use the `data-nb-` prefix. Switch the plugin over in the root `package.json` of your project:
+
+```json
+{
+  "nubond": {
+    "compliantWithW3CInterpolation": true
+  }
+}
+```
+
+The plugin then emits `data-nb-value` instead of `nb-value`:
+
+```html
+<h1>Hello, <span data-nb-value=" this.name "></span>!</h1>
+```
+
+The flag is read from the nearest `package.json`, searching upwards from the current working directory (the project root when Parcel runs). A missing flag means `nb-value`. A non-boolean value or an unreadable `package.json` logs an error, and the plugin falls back to `nb-value`.
+
+You can also set the mode in the plugin options, which take precedence over `package.json`. Use `root` to change the directory the search starts from:
+
+```json
+{
+  "plugins": {
+    "@nubond/posthtml-value-interpolation": { "compliantWithW3CInterpolation": true }
+  }
+}
+```
+
+> The plugin reports `package.json` as a dependency of each template, so after you change the flag, Parcel transforms the templates again with no need to clear `.parcel-cache`.
+
 ## License
 
 [MIT](LICENSE) © Dmytro Tomayly

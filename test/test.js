@@ -1,5 +1,8 @@
-import { describe, test, expect, vi } from 'vitest'
+import { describe, test, expect, vi, beforeAll, afterAll } from 'vitest'
 import posthtml from 'posthtml'
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, parse } from 'node:path'
 import plugin from '../lib/index.js'
 
 const process = (html, options) =>
@@ -607,5 +610,172 @@ describe('Unbalanced-brace', () => {
     expect(result).toBe(
       '<div><span nb-value=" this.a "></span> and <span nb-value=" this.fn({k: 1}) "></span> and <span nb-value=" {a: {b: 1}} "></span></div>'
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 21. W3C-compliant mode (data-nb-value)
+// ---------------------------------------------------------------------------
+describe('W3C-compliant mode', () => {
+  let workspace
+
+  const createProject = (name, packageJson) => {
+    const directory = join(workspace, name)
+    mkdirSync(directory, { recursive: true })
+    if (packageJson !== undefined) {
+      writeFileSync(join(directory, 'package.json'), typeof packageJson === 'string' ? packageJson : JSON.stringify(packageJson))
+    }
+    return directory
+  }
+
+  beforeAll(() => {
+    workspace = mkdtempSync(join(tmpdir(), 'posthtml-value-interpolation-'))
+  })
+
+  afterAll(() => {
+    rmSync(workspace, { recursive: true, force: true })
+  })
+
+  test('package.json flag true emits data-nb-value', async () => {
+    const root = createProject('enabled', { nubond: { languageService: true, compliantWithW3CInterpolation: true } })
+    const result = await process('<div>Hello {{ this.name }}</div>', { root })
+    expect(result).toBe('<div>Hello <span data-nb-value=" this.name "></span></div>')
+  })
+
+  test('package.json flag false emits nb-value', async () => {
+    const root = createProject('disabled', { nubond: { compliantWithW3CInterpolation: false } })
+    const result = await process('<div>{{ x }}</div>', { root })
+    expect(result).toBe('<div><span nb-value=" x "></span></div>')
+  })
+
+  test('nubond section without the flag emits nb-value', async () => {
+    const root = createProject('no-flag', { nubond: { languageService: true } })
+    const result = await process('<div>{{ x }}</div>', { root })
+    expect(result).toBe('<div><span nb-value=" x "></span></div>')
+  })
+
+  test('package.json without nubond section emits nb-value', async () => {
+    const root = createProject('no-section', { name: 'app' })
+    const result = await process('<div>{{ x }}</div>', { root })
+    expect(result).toBe('<div><span nb-value=" x "></span></div>')
+  })
+
+  test('nearest package.json is found by walking up from root', async () => {
+    createProject('walk-up', { nubond: { compliantWithW3CInterpolation: true } })
+    const root = createProject(join('walk-up', 'src', 'pages'))
+    const result = await process('<div>{{ x }}</div>', { root })
+    expect(result).toBe('<div><span data-nb-value=" x "></span></div>')
+  })
+
+  test('nearest package.json wins over an outer one', async () => {
+    createProject('nested', { nubond: { compliantWithW3CInterpolation: true } })
+    const root = createProject(join('nested', 'inner'), { name: 'inner' })
+    const result = await process('<div>{{ x }}</div>', { root })
+    expect(result).toBe('<div><span nb-value=" x "></span></div>')
+  })
+
+  test('explicit option overrides package.json', async () => {
+    const root = createProject('override', { nubond: { compliantWithW3CInterpolation: true } })
+    expect(await process('<div>{{ x }}</div>', { root, compliantWithW3CInterpolation: false }))
+      .toBe('<div><span nb-value=" x "></span></div>')
+    expect(await process('<div>{{ x }}</div>', { compliantWithW3CInterpolation: true }))
+      .toBe('<div><span data-nb-value=" x "></span></div>')
+  })
+
+  test('non-boolean flag logs an error and falls back to nb-value', async () => {
+    const root = createProject('non-boolean', { nubond: { compliantWithW3CInterpolation: 'yes' } })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await process('<div>{{ x }}</div>', { root })
+      expect(result).toBe('<div><span nb-value=" x "></span></div>')
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error.mock.calls[0][0]).toContain('"nubond.compliantWithW3CInterpolation"')
+      expect(error.mock.calls[0][0]).toContain('must be a boolean')
+    } finally {
+      error.mockRestore()
+    }
+  })
+
+  test('malformed package.json logs an error and falls back to nb-value', async () => {
+    const root = createProject('malformed', '{ "nubond": ')
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await process('<div>{{ x }}</div>', { root })
+      expect(result).toBe('<div><span nb-value=" x "></span></div>')
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error.mock.calls[0][0]).toContain('[posthtml-value-interpolation] cannot read')
+    } finally {
+      error.mockRestore()
+    }
+  })
+
+  test('package.json is re-read on every run of the same plugin instance', async () => {
+    const root = createProject('re-read', { nubond: { compliantWithW3CInterpolation: true } })
+    const instance = plugin({ root })
+    const run = () => posthtml([instance]).process('<div>{{ x }}</div>').then(r => r.html)
+
+    expect(await run()).toBe('<div><span data-nb-value=" x "></span></div>')
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ nubond: { compliantWithW3CInterpolation: false } }))
+    expect(await run()).toBe('<div><span nb-value=" x "></span></div>')
+  })
+
+  test('package.json with a BOM is read', async () => {
+    const root = createProject('bom', `﻿${JSON.stringify({ nubond: { compliantWithW3CInterpolation: true } })}`)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await process('<div>{{ x }}</div>', { root })
+      expect(result).toBe('<div><span data-nb-value=" x "></span></div>')
+      expect(error).not.toHaveBeenCalled()
+    } finally {
+      error.mockRestore()
+    }
+  })
+
+  test('package.json is reported as a dependency message', async () => {
+    const root = createProject('dependency', { nubond: { languageService: true } })
+    const result = await posthtml([plugin({ root })]).process('<div>{{ x }}</div>', { from: 'index.html' })
+    expect(result.messages).toEqual([{ type: 'dependency', file: join(root, 'package.json'), from: 'index.html' }])
+  })
+
+  test('no dependency message when the mode comes from the option', async () => {
+    const root = createProject('dependency-option', { nubond: { compliantWithW3CInterpolation: true } })
+    const result = await posthtml([plugin({ root, compliantWithW3CInterpolation: false })]).process('<div>{{ x }}</div>')
+    expect(result.messages).toEqual([])
+  })
+
+  test('non-boolean option logs an error and falls back to package.json', async () => {
+    const root = createProject('non-boolean-option', { nubond: { compliantWithW3CInterpolation: true } })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await process('<div>{{ x }}</div>', { root, compliantWithW3CInterpolation: 'true' })
+      expect(result).toBe('<div><span data-nb-value=" x "></span></div>')
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error.mock.calls[0][0]).toContain('"compliantWithW3CInterpolation" option must be a boolean')
+    } finally {
+      error.mockRestore()
+    }
+  })
+
+  test('non-string root logs an error and falls back to the current working directory', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await process('<div>{{ x }}</div>', { root: 42 })
+      expect(result).toBe('<div><span nb-value=" x "></span></div>')
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error.mock.calls[0][0]).toContain('"root" option must be a string')
+    } finally {
+      error.mockRestore()
+    }
+  })
+
+  test('data-nb-value mode keeps double-quote replacement and skipped content', async () => {
+    const root = createProject('w3c-mixed', { nubond: { compliantWithW3CInterpolation: true } })
+    const result = await process('<div>{{ this.fn("a") }}<script>if(a){{b()}}</script></div>', { root })
+    expect(result).toBe(`<div><span data-nb-value=" this.fn('a') "></span><script>if(a){{b()}}</script></div>`)
+  })
+
+  test.skipIf(existsSync(join(parse(tmpdir()).root, 'package.json')))('no package.json up to the filesystem root emits nb-value', async () => {
+    const result = await process('<div>{{ x }}</div>', { root: parse(tmpdir()).root })
+    expect(result).toBe('<div><span nb-value=" x "></span></div>')
   })
 })
